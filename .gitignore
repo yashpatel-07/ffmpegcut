@@ -1,0 +1,18 @@
+node_modules
+dist
+.DS_Store
+Thumbs.db
+
+.vscode
+
+# bun
+.bun
+
+# Vite
+*.local
+
+# Tauri / Rust
+src-tauri/target
+src-tauri/gen/schemas
+src-tauri/WixTools
+src-tauri/.cargo/config.toml
