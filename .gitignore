@@ -16,3 +16,6 @@ src-tauri/target
 src-tauri/gen/schemas
 src-tauri/WixTools
 src-tauri/.cargo/config.toml
+
+CONTEXT.md
+opencode.json

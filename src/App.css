@@ -301,6 +301,15 @@ video {
   font-size: var(--ff-text-caption);
 }
 
+.ff-preview__placeholder {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background-color: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .ff-topbar {
   display: flex;
   flex-direction: row;
@@ -383,5 +392,36 @@ video {
 .ff-timeline__time {
   font-family: var(--ff-font-mono);
   font-size: var(--ff-text-caption);
+  color: var(--ff-text-secondary);
+}
+
+.ff-timeline__playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background-color: var(--ff-accent);
+  pointer-events: none;
+  transform: translateX(-50%);
+  z-index: 5;
+}
+
+.ff-timeline--disabled {
+  pointer-events: none;
+  opacity: 0.4;
+}
+
+.ff-segment {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  height: 28px;
+  padding: 0 var(--ff-space-2);
+  border-radius: var(--ff-radius-sm);
+  background-color: var(--ff-surface-raised);
+}
+
+.ff-segment__time {
   color: var(--ff-text-secondary);
 }
