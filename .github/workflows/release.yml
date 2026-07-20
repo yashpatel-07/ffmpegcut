@@ -46,14 +46,10 @@ jobs:
         env:
           FFMPEG_AARCH64_B64: ${{ secrets.FFMPEG_MACOS_AARCH64_B64 }}
           FFPROBE_AARCH64_B64: ${{ secrets.FFPROBE_MACOS_AARCH64_B64 }}
-          FFMPEG_X86_64_B64: ${{ secrets.FFMPEG_MACOS_X86_64_B64 }}
-          FFPROBE_X86_64_B64: ${{ secrets.FFPROBE_MACOS_X86_64_B64 }}
         run: |
           set -euo pipefail
           printf '%s' "$FFMPEG_AARCH64_B64"  | base64 --decode > src-tauri/binaries/ffmpeg-aarch64-apple-darwin
           printf '%s' "$FFPROBE_AARCH64_B64" | base64 --decode > src-tauri/binaries/ffprobe-aarch64-apple-darwin
-          printf '%s' "$FFMPEG_X86_64_B64"   | base64 --decode > src-tauri/binaries/ffmpeg-x86_64-apple-darwin
-          printf '%s' "$FFPROBE_X86_64_B64"  | base64 --decode > src-tauri/binaries/ffprobe-x86_64-apple-darwin
           chmod +x src-tauri/binaries/ffmpeg-* src-tauri/binaries/ffprobe-*
 
       - name: Verify decoded sidecar binaries
@@ -61,11 +57,10 @@ jobs:
           set -euo pipefail
           for binary in \
             src-tauri/binaries/ffmpeg-aarch64-apple-darwin \
-            src-tauri/binaries/ffprobe-aarch64-apple-darwin \
-            src-tauri/binaries/ffmpeg-x86_64-apple-darwin \
-            src-tauri/binaries/ffprobe-x86_64-apple-darwin
+            src-tauri/binaries/ffprobe-aarch64-apple-darwin
           do
             test -s "$binary"
+            file "$binary" | grep -q 'arm64'
           done
 
       - name: Build aarch64 macOS bundle
@@ -74,8 +69,13 @@ jobs:
       - name: Verify packaged app includes sidecars
         run: |
           set -euo pipefail
-          test -s src-tauri/target/release/bundle/macos/ffmpegcut.app/Contents/MacOS/ffmpeg
-          test -s src-tauri/target/release/bundle/macos/ffmpegcut.app/Contents/MacOS/ffprobe
+          for binary in \
+            src-tauri/target/release/bundle/macos/ffmpegcut.app/Contents/MacOS/ffmpeg \
+            src-tauri/target/release/bundle/macos/ffmpegcut.app/Contents/MacOS/ffprobe
+          do
+            test -s "$binary"
+            file "$binary" | grep -q 'arm64'
+          done
 
       - name: Upload DMG artifact
         uses: actions/upload-artifact@v4
