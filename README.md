@@ -14,6 +14,11 @@ A small cross-platform desktop app for cutting video clips fast. Powered by Taur
 - Stream-copy output (no quality loss, very fast)
 - Single binary app on macOS and Windows
 
+## Platform support
+
+- **macOS**: Apple Silicon (aarch64) only. Intel Macs are not supported by the release builds.
+- **Windows**: not wired up in CI yet, but buildable from source (see below).
+
 ## Requirements
 
 To develop or build from source you need:
@@ -46,7 +51,7 @@ This starts Vite, launches the Tauri shell, and opens the app window with hot re
      Encode locally with `base64 -i <file> | pbcopy`.
 2. Open the Actions tab → "release" workflow → "Run workflow".
 3. Enter a tag (default `v0.1.0`) and click run.
-4. The workflow builds a **universal** `.dmg` (Apple Silicon + Intel) and attaches it to a new GitHub Release.
+4. The workflow builds an **aarch64-only** `.dmg` (Apple Silicon) and attaches it to a new GitHub Release. Intel Macs are not supported.
 
 Note: the app is unsigned. macOS will warn on first open — right-click → Open.
 

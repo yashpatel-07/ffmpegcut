@@ -17,7 +17,7 @@ permissions:
 
 jobs:
   build-macos:
-    name: Build macOS (universal)
+    name: Build macOS (aarch64)
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -56,8 +56,8 @@ jobs:
           printf '%s' "$FFPROBE_X86_64_B64"  | base64 --decode > src-tauri/binaries/ffprobe-x86_64-apple-darwin
           chmod +x src-tauri/binaries/ffmpeg-* src-tauri/binaries/ffprobe-*
 
-      - name: Build universal macOS bundle
-        run: bun run tauri build --target universal-apple-darwin
+      - name: Build aarch64 macOS bundle
+        run: bun run tauri build
 
       - name: Upload DMG artifact
         uses: actions/upload-artifact@v4
