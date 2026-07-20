@@ -43,17 +43,13 @@ This starts Vite, launches the Tauri shell, and opens the app window with hot re
 
 ### macOS (automated)
 
-1. Encode the four sidecar binaries as base64 and add them as repository secrets (Settings → Secrets and variables → Actions):
-   - `FFMPEG_MACOS_AARCH64_B64` — `ffmpeg-aarch64-apple-darwin`
-   - `FFPROBE_MACOS_AARCH64_B64` — `ffprobe-aarch64-apple-darwin`
-   - `FFMPEG_MACOS_X86_64_B64` — `ffmpeg-x86_64-apple-darwin`
-   - `FFPROBE_MACOS_X86_64_B64` — `ffprobe-x86_64-apple-darwin`
-     Encode locally with `base64 -i <file> | pbcopy`.
-2. Open the Actions tab → "release" workflow → "Run workflow".
-3. Enter a tag (default `v0.1.0`) and click run.
-4. The workflow builds an **aarch64-only** `.dmg` (Apple Silicon) and attaches it to a new GitHub Release. Intel Macs are not supported.
+The aarch64 (Apple Silicon) `ffmpeg`/`ffprobe` sidecars ship committed in the repo under `src-tauri/binaries/` — no secrets or base64 encoding step needed. CI verifies them (`test -s` + `file … | grep arm64`) on both the source and bundled binaries before building.
 
-Note: the app is unsigned. macOS will warn on first open — right-click → Open.
+1. Open the Actions tab → "release" workflow → "Run workflow".
+2. Enter a tag (default `v0.1.0`) and click run.
+3. The workflow builds an **aarch64-only** `.dmg` (Apple Silicon) and attaches it to a new GitHub Release. Intel Macs are not supported.
+
+**⚠️ The released DMG is unsigned and will not run as downloaded.** macOS Gatekeeper blocks unsigned, unnotarized apps from launching, and right-click → Open will not bypass this for a fresh download from the internet. The CI-built DMG is provided for reference/distribution scaffolding only — to actually run the app, build it locally on your own machine (see below), which produces a binary macOS will let you open.
 
 ### Locally
 
@@ -85,8 +81,9 @@ Note: the app is unsigned. Windows SmartScreen will warn on first launch.
 ## How it works
 
 1. Pick a video with the native file dialog.
-2. Drag the two timeline handles to set a range. Click **Add segment** to commit it; repeat for as many cuts as you want.
-3. Click **Export**, choose where to save, and `ffmpegcut` runs `ffmpeg` once with the `concat` demuxer — every segment is stitched in a single stream-copy pass.
+2. Drag the two timeline handles (full-width below the preview) to set a range. Add it as a segment in the panel next to the preview; repeat for as many cuts as you want.
+3. Click **Export** in the topbar, choose where to save, and `ffmpegcut` runs `ffmpeg` once with the `concat` demuxer — every segment is stitched in a single stream-copy pass.
+4. Use **Reset** or **Cancel** in the topbar to clear the selection or unload the video.
 
 ## Tech stack
 
@@ -106,8 +103,8 @@ Note: the app is unsigned. Windows SmartScreen will warn on first launch.
 
 ## License
 
-Proprietary — all rights reserved. See [LICENSE](./LICENSE).
+MIT licensed. See [LICENSE](./LICENSE). This covers ffmpegcut's own source code only, not the bundled sidecar binaries below.
 
 ## Credits
 
-This project is not affiliated with the FFmpeg project. It bundles unmodified `ffmpeg` and `ffprobe` binaries, which are licensed under [LGPL/GPL](https://www.ffmpeg.org/legal.html) depending on the build. FFmpeg is a trademark of its respective owners; please see [ffmpeg.org](https://ffmpeg.org/) for upstream source, license texts, and attribution.
+This project is not affiliated with the FFmpeg project. It bundles unmodified `ffmpeg` and `ffprobe` static binaries built by [osxexperts.net](https://www.osxexperts.net/) from [FFmpeg release/6.1](https://github.com/FFmpeg/FFmpeg/tree/release/6.1), compiled with `--enable-gpl` and GPL-licensed components (libx264, libx265). As a result, the bundled binaries are licensed under the **GPL v2 or later**, not LGPL — see [ffmpeg.org/legal.html](https://ffmpeg.org/legal.html) and the [GPL v2 text](https://www.gnu.org/licenses/old-licenses/gpl-2.0.html). Because `ffmpegcut` invokes these as separate sidecar processes rather than linking against them, the GPL does not extend to `ffmpegcut`'s own source. Anyone distributing the bundled binaries must still be able to provide, or point to, the corresponding FFmpeg source used to build them; the source tree above is that reference. FFmpeg is a trademark of Fabrice Bellard; see [ffmpeg.org](https://ffmpeg.org/) for upstream source, license texts, and attribution.
