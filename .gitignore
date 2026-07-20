@@ -18,4 +18,5 @@ src-tauri/WixTools
 src-tauri/.cargo/config.toml
 
 CONTEXT.md
+CHANGELOG.archive.md
 opencode.json

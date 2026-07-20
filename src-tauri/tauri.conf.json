@@ -13,10 +13,10 @@
     "windows": [
       {
         "title": "ffmpegcut",
-        "width": 800,
-        "height": 640,
+        "width": 840,
+        "height": 480,
         "minWidth": 800,
-        "minHeight": 640,
+        "minHeight": 440,
         "resizable": true
       }
     ],
@@ -31,10 +31,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
-    "externalBin": [
-      "binaries/ffmpeg",
-      "binaries/ffprobe"
-    ],
+    "externalBin": ["binaries/ffmpeg", "binaries/ffprobe"],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

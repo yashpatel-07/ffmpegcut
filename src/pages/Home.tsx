@@ -83,6 +83,7 @@ export default function Home() {
   const handleReset = () => {
     setSelectedStart(0);
     setSelectedEnd(duration());
+    setSegments([]);
   };
 
   const handleCancel = () => {
@@ -120,8 +121,7 @@ export default function Home() {
   };
 
   const canExport = () => segments().length > 0;
-  const canAddSegment = () =>
-    videoPath() && selectedStart() < selectedEnd();
+  const canAddSegment = () => videoPath() && selectedStart() < selectedEnd();
 
   const addSegment = () => {
     if (!canAddSegment()) return;
@@ -139,81 +139,151 @@ export default function Home() {
 
   return (
     <main class="app ff-stack" style={{ "--ff-stack-gap": "0" }}>
+      <div class="ff-topbar">
+        <div class="ff-topbar__start">
+          <button
+            class="ff-btn ff-btn--secondary"
+            onClick={handleCancel}
+            disabled={!videoPath() || exporting()}
+          >
+            Cancel
+          </button>
+          <button
+            class="ff-btn ff-btn--secondary"
+            onClick={handleReset}
+            disabled={!videoPath() || exporting()}
+          >
+            Reset
+          </button>
+        </div>
+        <div class="ff-topbar__end">
+          <button
+            class="ff-btn ff-btn--primary"
+            onClick={handleExport}
+            disabled={!canExport() || exporting()}
+          >
+            {exporting() ? "Exporting…" : "Export"}
+          </button>
+        </div>
+      </div>
+
       <div
-        class="ff-stack"
+        class="ff-row"
         style={{
+          "align-items": "flex-start",
+          "--ff-row-gap": "var(--ff-space-3)",
           padding: "var(--ff-space-3) var(--ff-space-4) 0",
-          "--ff-stack-gap": "0",
-          flex: 1,
         }}
       >
-        <div class="ff-preview" style={{ position: "relative" }}>
-          {videoPath() ? (
-            <video
-              ref={videoRef!}
-              class="ff-preview__video"
-              src={convertFileSrc(videoPath()!)}
-              controls
-              onLoadedMetadata={() => {
-                const v = videoRef!;
-                if (!v) return;
-                setVideoWidth(v.videoWidth);
-                setVideoHeight(v.videoHeight);
-              }}
-              onTimeUpdate={() => {
-                const v = videoRef!;
-                if (!v) return;
-                setCurrentTime(v.currentTime);
-              }}
-            />
-          ) : (
-            <div class="ff-preview__placeholder">
-              <button
-                class="ff-btn ff-btn--primary ff-btn--lg"
-                onClick={handleOpenVideo}
+        <div style={{ flex: "1 1 auto", "min-width": 0 }}>
+          <div class="ff-preview" style={{ position: "relative" }}>
+            {videoPath() ? (
+              <video
+                ref={videoRef!}
+                class="ff-preview__video"
+                src={convertFileSrc(videoPath()!)}
+                controls
+                onLoadedMetadata={() => {
+                  const v = videoRef!;
+                  if (!v) return;
+                  setVideoWidth(v.videoWidth);
+                  setVideoHeight(v.videoHeight);
+                }}
+                onTimeUpdate={() => {
+                  const v = videoRef!;
+                  if (!v) return;
+                  setCurrentTime(v.currentTime);
+                }}
+              />
+            ) : (
+              <div class="ff-preview__placeholder">
+                <button
+                  class="ff-btn ff-btn--primary ff-btn--lg"
+                  onClick={handleOpenVideo}
+                >
+                  Add video
+                </button>
+              </div>
+            )}
+            <div class="ff-preview__caption">
+              <div
+                class="ff-row"
+                style={{
+                  "align-items": "baseline",
+                  "--ff-row-gap": "var(--ff-space-2)",
+                  "flex-wrap": "wrap",
+                  "font-size": "var(--ff-text-caption)",
+                }}
               >
-                Add video
-              </button>
+                <span>{videoPath() ? fileName(videoPath()!) : "—"}</span>
+                <span class="ff-text--tertiary">·</span>
+                <span class="ff-text--secondary">
+                  {videoPath() ? fileExt(videoPath()!) : "—"}
+                </span>
+                <span class="ff-text--tertiary">·</span>
+                <span class="ff-text--secondary ff-mono">
+                  {videoPath()
+                    ? formatDuration(duration(), frameRate())
+                    : "00:00"}
+                </span>
+                <span class="ff-text--tertiary">·</span>
+                <span class="ff-text--secondary">
+                  {videoPath() && videoWidth() > 0 && videoHeight() > 0
+                    ? `${videoWidth()}×${videoHeight()}`
+                    : "—"}
+                </span>
+                <span class="ff-text--tertiary">·</span>
+                <span class="ff-text--secondary">
+                  {videoPath() && fileSize() != null
+                    ? formatFileSize(fileSize()!)
+                    : "—"}
+                </span>
+                <span class="ff-text--tertiary">·</span>
+                <span class="ff-text--secondary">
+                  {videoPath() && frameRate() > 0
+                    ? `${frameRate().toFixed(2)} fps`
+                    : "—"}
+                </span>
+              </div>
             </div>
-          )}
-          <div class="ff-preview__caption">
-            <div
-              class="ff-row"
-              style={{
-                "align-items": "baseline",
-                "--ff-row-gap": "var(--ff-space-2)",
-                "flex-wrap": "wrap",
-                "font-size": "var(--ff-text-caption)",
-              }}
+          </div>
+        </div>
+
+        <div
+          class="ff-stack"
+          style={{
+            flex: "0 0 280px",
+            "--ff-stack-gap": "var(--ff-space-1)",
+            "padding-top": "var(--ff-space-1)",
+          }}
+        >
+          <div class="ff-segment-container">
+            <For each={segments()}>
+              {(seg) => (
+                <div class="ff-segment">
+                  <span class="ff-segment__time ff-mono">
+                    {formatDuration(seg.start, frameRate())} —{" "}
+                    {formatDuration(seg.end, frameRate())}
+                  </span>
+                  <button
+                    class="ff-btn ff-btn--tertiary ff-btn--sm ff-btn--icon"
+                    onClick={() => removeSegment(seg.id)}
+                    disabled={exporting()}
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
+            </For>
+          </div>
+          <div class="ff-segment">
+            <button
+              class="ff-btn ff-btn--tertiary ff-btn--sm"
+              onClick={addSegment}
+              disabled={!canAddSegment() || exporting()}
             >
-              <span>{videoPath() ? fileName(videoPath()!) : "—"}</span>
-              <span class="ff-text--tertiary">·</span>
-              <span class="ff-text--secondary">
-                {videoPath() ? fileExt(videoPath()!) : "—"}
-              </span>
-              <span class="ff-text--tertiary">·</span>
-              <span class="ff-text--secondary ff-mono">
-                {videoPath() ? formatDuration(duration(), frameRate()) : "00:00"}
-              </span>
-              <span class="ff-text--tertiary">·</span>
-              <span class="ff-text--secondary">
-                {videoPath() && videoWidth() > 0 && videoHeight() > 0
-                  ? `${videoWidth()}×${videoHeight()}`
-                  : "—"}
-              </span>
-              <span class="ff-text--tertiary">·</span>
-              <span class="ff-text--secondary">
-                {videoPath() && fileSize() != null
-                  ? formatFileSize(fileSize()!)
-                  : "—"}
-              </span>
-              <span class="ff-text--tertiary">·</span>
-              <span class="ff-text--secondary">
-                {videoPath() && frameRate() > 0
-                  ? `${frameRate().toFixed(2)} fps`
-                  : "—"}
-              </span>
-            </div>
+              + Add segment
+            </button>
           </div>
         </div>
       </div>
@@ -243,87 +313,11 @@ export default function Home() {
         />
       </div>
 
-      {videoPath() && (
-        <div
-          class="ff-stack"
-          style={{
-            padding: "0 var(--ff-space-4) var(--ff-space-2)",
-            "--ff-stack-gap": "var(--ff-space-1)",
-          }}
-        >
-          <For each={segments()}>
-            {(seg) => (
-              <div class="ff-segment">
-                <span class="ff-segment__time ff-mono">
-                  {formatDuration(seg.start, frameRate())} — {formatDuration(seg.end, frameRate())}
-                </span>
-                <button
-                  class="ff-btn ff-btn--tertiary ff-btn--sm ff-btn--icon"
-                  onClick={() => removeSegment(seg.id)}
-                  disabled={exporting()}
-                >
-                  ✕
-                </button>
-              </div>
-            )}
-          </For>
-          <div class="ff-segment">
-            <button
-              class="ff-btn ff-btn--tertiary ff-btn--sm"
-              onClick={addSegment}
-              disabled={!canAddSegment() || exporting()}
-            >
-              + Add segment
-            </button>
-          </div>
-          {segments().length === 0 && (
-            <span
-              class="ff-text--tertiary"
-              style={{
-                "font-size": "var(--ff-text-caption)",
-                "text-align": "center",
-                padding: "var(--ff-space-1) 0",
-              }}
-            >
-              Select a range and add a segment to export
-            </span>
-          )}
-        </div>
-      )}
-
       {exporting() && (
         <div class="ff-progress ff-progress--indeterminate">
           <div class="ff-progress__fill" />
         </div>
       )}
-
-      <div class="ff-actionbar">
-        <div class="ff-actionbar__start">
-          <button
-            class="ff-btn ff-btn--primary"
-            onClick={handleExport}
-            disabled={!canExport() || exporting()}
-          >
-            {exporting() ? "Exporting…" : "Export"}
-          </button>
-        </div>
-        <div class="ff-actionbar__end">
-          <button
-            class="ff-btn ff-btn--secondary"
-            onClick={handleReset}
-            disabled={!videoPath() || exporting()}
-          >
-            Reset
-          </button>
-          <button
-            class="ff-btn ff-btn--secondary"
-            onClick={handleCancel}
-            disabled={!videoPath() || exporting()}
-          >
-            Cancel
-          </button>
-        </div>
-      </div>
     </main>
   );
 }

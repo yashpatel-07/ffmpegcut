@@ -114,7 +114,7 @@ video {
   height: 100%;
   padding: var(--ff-space-3);
   min-width: 800px;
-  min-height: 640px;
+  min-height: 440px;
 }
 
 .ff-stack {
@@ -317,7 +317,6 @@ video {
   justify-content: space-between;
   height: var(--ff-control-lg);
   padding: 0 var(--ff-space-4);
-  border-bottom: 1px solid var(--ff-border);
 }
 
 .ff-topbar__start,
@@ -411,12 +410,21 @@ video {
   opacity: 0.4;
 }
 
+.ff-segment-container {
+  display: flex;
+  flex-direction: row;
+  align-items: start;
+  flex-wrap: wrap;
+}
+
 .ff-segment {
   display: flex;
   flex-direction: row;
   align-items: center;
   justify-content: space-between;
   height: 28px;
+  width: fit-content;
+  margin: 0 0 6px 6px;
   padding: 0 var(--ff-space-2);
   border-radius: var(--ff-radius-sm);
   background-color: var(--ff-surface-raised);

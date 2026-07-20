@@ -4,9 +4,7 @@ A small cross-platform desktop app for cutting video clips fast. Powered by Taur
 
 ## Preview
 
-<!-- TODO: drop a screenshot of the empty state here -->
-<!-- TODO: drop a screenshot of the timeline + segments UI here -->
-<!-- TODO: drop a screenshot of an export in progress / completed -->
+<img src="preview/ffmpegcut_prev0.png" alt="preview_img">
 
 ## Features
 
@@ -45,7 +43,7 @@ This starts Vite, launches the Tauri shell, and opens the app window with hot re
    - `FFPROBE_MACOS_AARCH64_B64` — `ffprobe-aarch64-apple-darwin`
    - `FFMPEG_MACOS_X86_64_B64` — `ffmpeg-x86_64-apple-darwin`
    - `FFPROBE_MACOS_X86_64_B64` — `ffprobe-x86_64-apple-darwin`
-   Encode locally with `base64 -i <file> | pbcopy`.
+     Encode locally with `base64 -i <file> | pbcopy`.
 2. Open the Actions tab → "release" workflow → "Run workflow".
 3. Enter a tag (default `v0.1.0`) and click run.
 4. The workflow builds a **universal** `.dmg` (Apple Silicon + Intel) and attaches it to a new GitHub Release.

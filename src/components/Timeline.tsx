@@ -36,18 +36,10 @@ export default function Timeline(props: TimelineProps) {
   const [dragValue, setDragValue] = createSignal(0);
 
   const displayStart = createMemo(() =>
-    props.disabled
-      ? 0
-      : dragHandle() === "start"
-        ? dragValue()
-        : props.start,
+    props.disabled ? 0 : dragHandle() === "start" ? dragValue() : props.start,
   );
   const displayEnd = createMemo(() =>
-    props.disabled
-      ? 0
-      : dragHandle() === "end"
-        ? dragValue()
-        : props.end,
+    props.disabled ? 0 : dragHandle() === "end" ? dragValue() : props.end,
   );
   const rangeStart = createMemo(() =>
     props.disabled || props.duration === 0
@@ -55,9 +47,7 @@ export default function Timeline(props: TimelineProps) {
       : displayStart() / props.duration,
   );
   const rangeEnd = createMemo(() =>
-    props.disabled || props.duration === 0
-      ? 0
-      : displayEnd() / props.duration,
+    props.disabled || props.duration === 0 ? 0 : displayEnd() / props.duration,
   );
   const playheadPercent = createMemo(() =>
     props.disabled || props.duration === 0
@@ -67,7 +57,10 @@ export default function Timeline(props: TimelineProps) {
 
   const valueFromEvent = (e: PointerEvent): number => {
     const rect = trackRef.getBoundingClientRect();
-    const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    const ratio = Math.max(
+      0,
+      Math.min(1, (e.clientX - rect.left) / rect.width),
+    );
     const value = ratio * props.duration;
     if (props.frameRate && props.frameRate > 0) {
       return Math.round(value * props.frameRate) / props.frameRate;
@@ -179,15 +172,20 @@ export default function Timeline(props: TimelineProps) {
       <div class="ff-row" style={{ "justify-content": "space-between" }}>
         <span class="ff-timeline__time">00:00</span>
         <span class="ff-timeline__time">
-          {formatTime(displayStart(), props.frameRate)} — {formatTime(displayEnd(), props.frameRate)}
+          {formatTime(displayStart(), props.frameRate)} —{" "}
+          {formatTime(displayEnd(), props.frameRate)}
         </span>
-        <span class="ff-timeline__time">{formatTime(props.duration, props.frameRate)}</span>
+        <span class="ff-timeline__time">
+          {formatTime(props.duration, props.frameRate)}
+        </span>
+      </div>
+      <div>
         {props.frameRate && props.frameRate > 0 && (
           <span
             class="ff-timeline__time"
             style={{ opacity: 0.4, "font-size": "9px", "align-self": "center" }}
           >
-            MM:SS:FF
+            MM:SS:FF FF = Frames
           </span>
         )}
       </div>
