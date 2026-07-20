@@ -42,17 +42,7 @@ jobs:
       - name: Install JS deps
         run: bun install --frozen-lockfile
 
-      - name: Decode macOS sidecar binaries
-        env:
-          FFMPEG_AARCH64_B64: ${{ secrets.FFMPEG_MACOS_AARCH64_B64 }}
-          FFPROBE_AARCH64_B64: ${{ secrets.FFPROBE_MACOS_AARCH64_B64 }}
-        run: |
-          set -euo pipefail
-          printf '%s' "$FFMPEG_AARCH64_B64"  | base64 --decode > src-tauri/binaries/ffmpeg-aarch64-apple-darwin
-          printf '%s' "$FFPROBE_AARCH64_B64" | base64 --decode > src-tauri/binaries/ffprobe-aarch64-apple-darwin
-          chmod +x src-tauri/binaries/ffmpeg-* src-tauri/binaries/ffprobe-*
-
-      - name: Verify decoded sidecar binaries
+      - name: Verify committed sidecar binaries
         run: |
           set -euo pipefail
           for binary in \

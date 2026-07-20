@@ -17,6 +17,9 @@ src-tauri/gen/schemas
 src-tauri/WixTools
 src-tauri/.cargo/config.toml
 
+# local-only scratch (e.g. base64'd sidecar blobs, personal secrets dumps)
+.secrets/
+
 CONTEXT.md
 CHANGELOG.archive.md
 opencode.json
