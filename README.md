@@ -4,7 +4,9 @@ A small cross-platform desktop app for cutting video clips fast. Powered by Taur
 
 ## Preview
 
-<img src="preview/ffmpegcut_prev0.png" alt="preview_img">
+<img src="preview/ffmpegcut_prev2.png" alt="preview_img">
+
+<img src="preview/ffmpegcut_prev1.png" alt="preview_img">
 
 ## Features
 

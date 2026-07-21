@@ -63,7 +63,9 @@ export default function Home() {
   const [fileSize, setFileSize] = createSignal<number | null>(null);
   const [frameRate, setFrameRate] = createSignal(0);
   const [segments, setSegments] = createSignal<Segment[]>([]);
-  const [previewProgress, setPreviewProgress] = createSignal<number | null>(null);
+  const [previewProgress, setPreviewProgress] = createSignal<number | null>(
+    null,
+  );
 
   // const [videoUrl] = createResource(videoPath, (path) => getVideoUrl(path));
   const [previewPath] = createResource(videoPath, (path) =>
@@ -187,6 +189,11 @@ export default function Home() {
           </button>
         </div>
       </div>
+      {exporting() && (
+        <div class="ff-progress ff-progress--indeterminate">
+          <div class="ff-progress__fill" />
+        </div>
+      )}
 
       <div
         class="ff-row"
@@ -322,6 +329,14 @@ export default function Home() {
               + Add segment
             </button>
           </div>
+          {segments().length > 0 ? (
+            ""
+          ) : (
+            <span class="ff-text--secondary ff-mono">
+              Use sliders on left and right to highlight the segment and then
+              click "+ Add segment"
+            </span>
+          )}
         </div>
       </div>
 
@@ -349,12 +364,9 @@ export default function Home() {
           disabled={!videoPath() || duration() === 0}
         />
       </div>
-
-      {exporting() && (
-        <div class="ff-progress ff-progress--indeterminate">
-          <div class="ff-progress__fill" />
-        </div>
-      )}
+      <span class="ff-text--secondary ff-mono">
+        ~Preview files (if any) are automatically deleted when you close the app
+      </span>
     </main>
   );
 }
