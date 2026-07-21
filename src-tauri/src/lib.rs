@@ -1,6 +1,168 @@
+mod video_server;
+
 use serde_json::Value;
+use std::path::{Path, PathBuf};
+use std::sync::Mutex;
+use tauri::{Manager, State};
 use tauri_plugin_dialog::DialogExt;
+use tauri_plugin_shell::process::{CommandChild, CommandEvent, TerminatedPayload};
 use tauri_plugin_shell::ShellExt;
+
+struct ServerPort(u16);
+struct PreviewCache(Mutex<std::collections::HashMap<String, String>>);
+struct PreviewProcess(Mutex<Option<(CommandChild, String)>>);
+const NEEDS_REMUX: &[&str] = &["mkv", "avi", "wmv", "flv", "ts", "m2ts", "mts"];
+
+fn needs_remux(path: &str) -> bool {
+    Path::new(path)
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|ext| NEEDS_REMUX.contains(&ext.to_lowercase().as_str()))
+        .unwrap_or(false)
+}
+
+#[tauri::command]
+async fn get_video_url(path: String, port: State<'_, ServerPort>) -> Result<String, String> {
+    let encoded: String = urlencoding::encode(&path).to_string();
+    Ok(format!("http://localhost:{}/?path={}", port.0, encoded))
+}
+
+#[tauri::command]
+async fn cancel_preview(proc: State<'_, PreviewProcess>) -> Result<(), String> {
+    let entry = {
+        let mut guard = proc.0.lock().map_err(|e| e.to_string())?;
+        guard.take()
+    };
+    if let Some((child, out_path)) = entry {
+        // Ignore errors from killing an already-exited process.
+        let _ = child.kill();
+        let _ = tokio::fs::remove_file(&out_path).await;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn generate_preview(
+    app: tauri::AppHandle,
+    path: String,
+    cache: State<'_, PreviewCache>,
+    proc: State<'_, PreviewProcess>,
+) -> Result<String, String> {
+    if !needs_remux(&path) {
+        return Ok(path);
+    }
+ 
+    if let Some(cached) = {
+        let map = cache.0.lock().map_err(|e| e.to_string())?;
+        map.get(&path).cloned()
+    } {
+        if tokio::fs::metadata(&cached).await.is_ok() {
+            return Ok(cached);
+        }
+        // Cached file vanished (e.g. temp dir cleared) — fall through and
+        // regenerate it.
+    }
+ 
+    // Kill any previous in-flight remux before starting this one, and
+    // clean up whatever partial file it had been writing.
+    {
+        let previous = {
+            let mut guard = proc.0.lock().map_err(|e| e.to_string())?;
+            guard.take()
+        };
+        if let Some((previous_child, previous_out_path)) = previous {
+            let _ = previous_child.kill();
+            let _ = tokio::fs::remove_file(&previous_out_path).await;
+        }
+    }
+ 
+    let mut out_path: PathBuf = std::env::temp_dir();
+    let stem = Path::new(&path)
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("preview");
+    out_path.push(format!(
+        "ffmpegcut_preview_{}_{}.mp4",
+        std::process::id(),
+        stem
+    ));
+    let out_str = out_path.to_string_lossy().to_string();
+ 
+    let (mut rx, child) = app
+        .shell()
+        .sidecar("ffmpeg")
+        .map_err(|e| e.to_string())?
+        .args([
+            "-y",
+            "-i",
+            &path,
+            // Explicit stream mapping avoids ambiguity
+            "-map",
+            "0:v:0",
+            "-map",
+            "0:a:0",
+            "-c:v",
+            "copy",
+            // Force AAC stereo — sidesteps browsers failing to decode
+            // unusual surround layouts (5.0/5.1/E-AC-3 etc.) even after
+            // the codec itself is transcoded.
+            "-c:a",
+            "aac",
+            "-ac",
+            "2",
+            "-b:a",
+            "192k",
+            "-movflags",
+            "+faststart",
+            &out_str,
+        ])
+        .spawn()
+        .map_err(|e| e.to_string())?;
+ 
+    {
+        let mut guard = proc.0.lock().map_err(|e| e.to_string())?;
+        *guard = Some((child, out_str.clone()));
+    }
+ 
+    let mut stderr_buf = String::new();
+    let mut exited_with: Option<TerminatedPayload> = None;
+ 
+    while let Some(event) = rx.recv().await {
+        match event {
+            CommandEvent::Stderr(bytes) => {
+                stderr_buf.push_str(&String::from_utf8_lossy(&bytes));
+            }
+            CommandEvent::Terminated(payload) => {
+                exited_with = Some(payload);
+            }
+            _ => {}
+        }
+    }
+ 
+    {
+        let mut guard = proc.0.lock().map_err(|e| e.to_string())?;
+        *guard = None;
+    }
+ 
+    let success = exited_with
+        .as_ref()
+        .and_then(|p| p.code)
+        .map(|c| c == 0)
+        .unwrap_or(false);
+ 
+    if !success {
+        // Clean up whatever partial file ffmpeg may have written before failing
+        let _ = tokio::fs::remove_file(&out_str).await;
+        return Err(format!("ffmpeg remux failed: {stderr_buf}"));
+    }
+ 
+    {
+        let mut map = cache.0.lock().map_err(|e| e.to_string())?;
+        map.insert(path, out_str.clone());
+    }
+ 
+    Ok(out_str)
+}
 
 #[tauri::command]
 async fn pick_video(app: tauri::AppHandle) -> Result<Option<String>, String> {
@@ -198,6 +360,17 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
+        .setup(|app| {
+            let handle = app.handle().clone();
+            // let port = tauri::async_runtime::block_on(async move {
+            //     video_server::start_server().await
+            // });
+            let port = tauri::async_runtime::block_on(video_server::start_server());
+            handle.manage(ServerPort(port));
+            handle.manage(PreviewCache(Mutex::new(std::collections::HashMap::new())));
+            handle.manage(PreviewProcess(Mutex::new(None)));
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             pick_video,
             pick_output_path,
@@ -205,7 +378,10 @@ pub fn run() {
             get_file_size,
             get_frame_rate,
             cut_video,
-            cut_video_segments
+            cut_video_segments,
+            get_video_url,
+            generate_preview,
+            cancel_preview
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

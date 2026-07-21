@@ -20,6 +20,18 @@ export async function getFrameRate(path: string): Promise<number> {
   return invoke("get_frame_rate", { path });
 }
 
+export async function getVideoUrl(path: string): Promise<string> {
+  return invoke("get_video_url", { path });
+}
+
+export async function generatePreview(path: string): Promise<string> {
+  return invoke("generate_preview", { path });
+}
+
+export async function cancelPreview(): Promise<void> {
+  return invoke("cancel_preview");
+}
+
 export async function cutVideoSegments(
   input: string,
   output: string,

@@ -1,11 +1,13 @@
-import { createSignal, For } from "solid-js";
-import { convertFileSrc } from "@tauri-apps/api/core";
+import { createSignal, createResource, For } from "solid-js";
 import {
   pickVideo,
   pickOutputPath,
   getDuration,
   getFileSize,
   getFrameRate,
+  getVideoUrl,
+  generatePreview,
+  cancelPreview,
   cutVideoSegments,
 } from "../lib/tauri";
 import Timeline, { type Segment } from "../components/Timeline";
@@ -59,6 +61,12 @@ export default function Home() {
   const [frameRate, setFrameRate] = createSignal(0);
   const [segments, setSegments] = createSignal<Segment[]>([]);
 
+  // const [videoUrl] = createResource(videoPath, (path) => getVideoUrl(path));
+  const [previewPath] = createResource(videoPath, (path) =>
+    generatePreview(path),
+  );
+  const [videoUrl] = createResource(previewPath, (path) => getVideoUrl(path));
+
   let videoRef: HTMLVideoElement | undefined;
   let idCounter = 0;
 
@@ -86,7 +94,8 @@ export default function Home() {
     setSegments([]);
   };
 
-  const handleCancel = () => {
+  const handleCancel = async () => {
+    await cancelPreview().catch(() => {});
     setVideoPath(null);
     setDuration(0);
     setCurrentTime(0);
@@ -177,11 +186,11 @@ export default function Home() {
       >
         <div style={{ flex: "1 1 auto", "min-width": 0 }}>
           <div class="ff-preview" style={{ position: "relative" }}>
-            {videoPath() ? (
+            {/* {videoPath() ? (
               <video
                 ref={videoRef!}
                 class="ff-preview__video"
-                src={convertFileSrc(videoPath()!)}
+                src={videoUrl()}
                 controls
                 onLoadedMetadata={() => {
                   const v = videoRef!;
@@ -195,6 +204,46 @@ export default function Home() {
                   setCurrentTime(v.currentTime);
                 }}
               />
+            ) : (
+              <div class="ff-preview__placeholder">
+                <button
+                  class="ff-btn ff-btn--primary ff-btn--lg"
+                  onClick={handleOpenVideo}
+                >
+                  Add video
+                </button>
+              </div>
+            )} */}
+            {videoPath() ? (
+              previewPath.loading ? (
+                <div class="ff-preview__placeholder">
+                  <span class="ff-text--secondary">Preparing preview…</span>
+                </div>
+              ) : previewPath.error ? (
+                <div class="ff-preview__placeholder">
+                  <span class="ff-text--secondary">
+                    Couldn't preview this file: {String(previewPath.error)}
+                  </span>
+                </div>
+              ) : (
+                <video
+                  ref={videoRef!}
+                  class="ff-preview__video"
+                  src={videoUrl()}
+                  controls
+                  onLoadedMetadata={() => {
+                    const v = videoRef!;
+                    if (!v) return;
+                    setVideoWidth(v.videoWidth);
+                    setVideoHeight(v.videoHeight);
+                  }}
+                  onTimeUpdate={() => {
+                    const v = videoRef!;
+                    if (!v) return;
+                    setCurrentTime(v.currentTime);
+                  }}
+                />
+              )
             ) : (
               <div class="ff-preview__placeholder">
                 <button
