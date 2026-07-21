@@ -3,7 +3,7 @@ mod video_server;
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
-use tauri::{Manager, State};
+use tauri::{Emitter, Manager, State};
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_shell::process::{CommandChild, CommandEvent, TerminatedPayload};
 use tauri_plugin_shell::ShellExt;
@@ -19,6 +19,17 @@ fn needs_remux(path: &str) -> bool {
         .and_then(|e| e.to_str())
         .map(|ext| NEEDS_REMUX.contains(&ext.to_lowercase().as_str()))
         .unwrap_or(false)
+}
+
+fn parse_ffmpeg_time(s: &str) -> Option<f64> {
+    let parts: Vec<&str> = s.split(':').collect();
+    if parts.len() != 3 {
+        return None;
+    }
+    let h: f64 = parts[0].parse().ok()?;
+    let m: f64 = parts[1].parse().ok()?;
+    let sec: f64 = parts[2].parse().ok()?;
+    Some(h * 3600.0 + m * 60.0 + sec)
 }
 
 #[tauri::command]
@@ -88,6 +99,32 @@ async fn generate_preview(
     ));
     let out_str = out_path.to_string_lossy().to_string();
  
+    // Fetch duration via ffprobe for progress calculation.
+    let duration = app
+        .shell()
+        .sidecar("ffprobe")
+        .map_err(|e| e.to_string())?
+        .args([
+            "-v",
+            "quiet",
+            "-print_format",
+            "json",
+            "-show_format",
+            &path,
+        ])
+        .output()
+        .await
+        .map_err(|e| e.to_string())
+        .ok()
+        .and_then(|output| {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let parsed: Value = serde_json::from_str(&stdout).ok()?;
+            parsed["format"]["duration"]
+                .as_str()
+                .and_then(|d| d.parse::<f64>().ok())
+        })
+        .unwrap_or(0.0);
+
     let (mut rx, child) = app
         .shell()
         .sidecar("ffmpeg")
@@ -96,16 +133,14 @@ async fn generate_preview(
             "-y",
             "-i",
             &path,
-            // Explicit stream mapping avoids ambiguity
+            "-progress",
+            "pipe:1",
             "-map",
             "0:v:0",
             "-map",
             "0:a:0",
             "-c:v",
             "copy",
-            // Force AAC stereo — sidesteps browsers failing to decode
-            // unusual surround layouts (5.0/5.1/E-AC-3 etc.) even after
-            // the codec itself is transcoded.
             "-c:a",
             "aac",
             "-ac",
@@ -124,11 +159,27 @@ async fn generate_preview(
         *guard = Some((child, out_str.clone()));
     }
  
+let mut stdout_buf = String::new();
     let mut stderr_buf = String::new();
     let mut exited_with: Option<TerminatedPayload> = None;
- 
+
     while let Some(event) = rx.recv().await {
         match event {
+            CommandEvent::Stdout(bytes) => {
+                stdout_buf.push_str(&String::from_utf8_lossy(&bytes));
+                while let Some(nl) = stdout_buf.find('\n') {
+                    let line = stdout_buf[..nl].trim().to_string();
+                    stdout_buf.drain(..=nl);
+                    if let Some(time_str) = line.strip_prefix("out_time=") {
+                        if duration > 0.0 {
+                            if let Some(secs) = parse_ffmpeg_time(time_str) {
+                                let pct = ((secs / duration) * 100.0) as u8;
+                                let _ = app.emit("preview-progress", pct);
+                            }
+                        }
+                    }
+                }
+            }
             CommandEvent::Stderr(bytes) => {
                 stderr_buf.push_str(&String::from_utf8_lossy(&bytes));
             }
@@ -369,6 +420,40 @@ pub fn run() {
             handle.manage(ServerPort(port));
             handle.manage(PreviewCache(Mutex::new(std::collections::HashMap::new())));
             handle.manage(PreviewProcess(Mutex::new(None)));
+
+            // Clean up all preview temp files on app close.
+            let close_handle = handle.clone();
+            let _window = app.get_webview_window("main").unwrap();
+            _window.on_window_event(move |event| {
+                if let tauri::WindowEvent::CloseRequested { .. } = event {
+                    let cache = close_handle.state::<PreviewCache>();
+                    let proc = close_handle.state::<PreviewProcess>();
+
+                    let in_flight = {
+                        let mut guard = match proc.0.lock() {
+                            Ok(g) => g,
+                            Err(_) => return,
+                        };
+                        guard.take()
+                    };
+                    if let Some((child, out_path)) = in_flight {
+                        let _ = child.kill();
+                        let _ = std::fs::remove_file(&out_path);
+                    }
+
+                    let paths = {
+                        let mut map = match cache.0.lock() {
+                            Ok(m) => m,
+                            Err(_) => return,
+                        };
+                        map.drain().map(|(_, v)| v).collect::<Vec<_>>()
+                    };
+                    for p in &paths {
+                        let _ = std::fs::remove_file(p);
+                    }
+                }
+            });
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -381,7 +466,7 @@ pub fn run() {
             cut_video_segments,
             get_video_url,
             generate_preview,
-            cancel_preview
+            cancel_preview,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

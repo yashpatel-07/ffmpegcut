@@ -1,4 +1,5 @@
-import { createSignal, createResource, For } from "solid-js";
+import { createSignal, createResource, For, onCleanup } from "solid-js";
+import { listen } from "@tauri-apps/api/event";
 import {
   pickVideo,
   pickOutputPath,
@@ -23,13 +24,15 @@ function fileExt(path: string): string {
 }
 
 function formatDuration(s: number, fps?: number): string {
-  const m = Math.floor(s / 60);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
   const sec = Math.floor(s % 60);
+  const prefix = h > 0 ? `${h}:${m.toString().padStart(2, "0")}` : `${m}`;
   if (fps && fps > 0) {
     const frame = Math.round((s % 1) * fps);
-    return `${m.toString().padStart(2, "0")}:${sec.toString().padStart(2, "0")}:${frame.toString().padStart(2, "0")}`;
+    return `${prefix}:${sec.toString().padStart(2, "0")}:${frame.toString().padStart(2, "0")}`;
   }
-  return `${m.toString().padStart(2, "0")}:${sec.toString().padStart(2, "0")}`;
+  return `${prefix}:${sec.toString().padStart(2, "0")}`;
 }
 
 function deriveOutputName(input: string): string {
@@ -60,6 +63,7 @@ export default function Home() {
   const [fileSize, setFileSize] = createSignal<number | null>(null);
   const [frameRate, setFrameRate] = createSignal(0);
   const [segments, setSegments] = createSignal<Segment[]>([]);
+  const [previewProgress, setPreviewProgress] = createSignal<number | null>(null);
 
   // const [videoUrl] = createResource(videoPath, (path) => getVideoUrl(path));
   const [previewPath] = createResource(videoPath, (path) =>
@@ -67,10 +71,17 @@ export default function Home() {
   );
   const [videoUrl] = createResource(previewPath, (path) => getVideoUrl(path));
 
+  // Listen for preview progress events from the backend.
+  const unlisten = listen<number>("preview-progress", (event) => {
+    setPreviewProgress(event.payload);
+  });
+  onCleanup(() => unlisten.then((fn) => fn()));
+
   let videoRef: HTMLVideoElement | undefined;
   let idCounter = 0;
 
   const handleOpenVideo = async () => {
+    setPreviewProgress(null);
     const path = await pickVideo();
     if (!path) return;
     try {
@@ -106,6 +117,7 @@ export default function Home() {
     setFileSize(null);
     setFrameRate(0);
     setSegments([]);
+    setPreviewProgress(null);
   };
 
   const handleExport = async () => {
@@ -186,38 +198,14 @@ export default function Home() {
       >
         <div style={{ flex: "1 1 auto", "min-width": 0 }}>
           <div class="ff-preview" style={{ position: "relative" }}>
-            {/* {videoPath() ? (
-              <video
-                ref={videoRef!}
-                class="ff-preview__video"
-                src={videoUrl()}
-                controls
-                onLoadedMetadata={() => {
-                  const v = videoRef!;
-                  if (!v) return;
-                  setVideoWidth(v.videoWidth);
-                  setVideoHeight(v.videoHeight);
-                }}
-                onTimeUpdate={() => {
-                  const v = videoRef!;
-                  if (!v) return;
-                  setCurrentTime(v.currentTime);
-                }}
-              />
-            ) : (
-              <div class="ff-preview__placeholder">
-                <button
-                  class="ff-btn ff-btn--primary ff-btn--lg"
-                  onClick={handleOpenVideo}
-                >
-                  Add video
-                </button>
-              </div>
-            )} */}
             {videoPath() ? (
               previewPath.loading ? (
                 <div class="ff-preview__placeholder">
-                  <span class="ff-text--secondary">Preparing preview…</span>
+                  <span class="ff-text--secondary">
+                    {previewProgress() != null
+                      ? `Preparing preview… ${previewProgress()}%`
+                      : "Preparing preview…"}
+                  </span>
                 </div>
               ) : previewPath.error ? (
                 <div class="ff-preview__placeholder">

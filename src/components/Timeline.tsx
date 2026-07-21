@@ -19,13 +19,15 @@ interface TimelineProps {
 }
 
 function formatTime(s: number, fps?: number): string {
-  const m = Math.floor(s / 60);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
   const sec = Math.floor(s % 60);
+  const prefix = h > 0 ? `${h}:${m.toString().padStart(2, "0")}` : `${m}`;
   if (fps && fps > 0) {
     const frame = Math.round((s % 1) * fps);
-    return `${m}:${sec.toString().padStart(2, "0")}:${frame.toString().padStart(2, "0")}`;
+    return `${prefix}:${sec.toString().padStart(2, "0")}:${frame.toString().padStart(2, "0")}`;
   }
-  return `${m}:${sec.toString().padStart(2, "0")}`;
+  return `${prefix}:${sec.toString().padStart(2, "0")}`;
 }
 
 export default function Timeline(props: TimelineProps) {
@@ -185,7 +187,7 @@ export default function Timeline(props: TimelineProps) {
             class="ff-timeline__time"
             style={{ opacity: 0.4, "font-size": "9px", "align-self": "center" }}
           >
-            MM:SS:FF FF = Frames
+            HH:MM:SS:FF
           </span>
         )}
       </div>
