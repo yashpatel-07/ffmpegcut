@@ -89,13 +89,13 @@ Note: the app is unsigned. Windows SmartScreen will warn on first launch.
 
 ## Tech stack
 
-![Tauri](https://img.shields.io/badge/Tauri-2.0-FFC131?logo=tauri&logoColor=white)
-![Solid](https://img.shields.io/badge/Solid-1.9-2C4F7C?logo=solid&logoColor=white)
-![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)
-![Vite](https://img.shields.io/badge/Vite-6.0-646CFF?logo=vite&logoColor=white)
-![Bun](https://img.shields.io/badge/Bun-000?logo=bun&logoColor=white)
-![Rust](https://img.shields.io/badge/Rust-000?logo=rust&logoColor=white)
-![FFmpeg](https://img.shields.io/badge/FFmpeg-007808?logo=ffmpeg&logoColor=white)
+![Tauri](https://img.shields.io/badge/Tauri-2.0-FFC131?style=for-the-badge&logo=tauri&logoColor=yellow)
+![Solid](https://img.shields.io/badge/Solid-1.9-2C4F7C?style=for-the-badge&logo=solid&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white)
+![Vite](https://img.shields.io/badge/Vite-6.0-646CFF?style=for-the-badge&logo=vite&logoColor=white)
+![Bun](https://img.shields.io/badge/Bun-000?style=for-the-badge&logo=bun&logoColor=lightpink)
+![Rust](https://img.shields.io/badge/Rust-000?style=for-the-badge&logo=rust&logoColor=orange)
+![FFmpeg](https://img.shields.io/badge/FFmpeg-007808?style=for-the-badge&logo=ffmpeg&logoColor=white)
 
 - [Tauri 2](https://tauri.app/) (Rust) — desktop shell, sidecar process
 - [Solid 1.9](https://www.solidjs.com/) + TypeScript — reactive UI
