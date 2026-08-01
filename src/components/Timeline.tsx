@@ -16,6 +16,8 @@ interface TimelineProps {
   frameRate?: number;
   onSeek?: (time: number) => void;
   segments?: Segment[];
+  keyframes?: number[];
+  snapToKeyframes?: boolean;
 }
 
 function formatTime(s: number, fps?: number): string {
@@ -64,6 +66,15 @@ export default function Timeline(props: TimelineProps) {
       Math.min(1, (e.clientX - rect.left) / rect.width),
     );
     const value = ratio * props.duration;
+    if (
+      props.snapToKeyframes &&
+      props.keyframes &&
+      props.keyframes.length > 0
+    ) {
+      return props.keyframes.reduce((best, kf) =>
+        Math.abs(kf - value) < Math.abs(best - value) ? kf : best,
+      );
+    }
     if (props.frameRate && props.frameRate > 0) {
       return Math.round(value * props.frameRate) / props.frameRate;
     }

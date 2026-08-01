@@ -6,6 +6,7 @@ import {
   getDuration,
   getFileSize,
   getFrameRate,
+  getKeyframes,
   getVideoUrl,
   generatePreview,
   cancelPreview,
@@ -62,6 +63,8 @@ export default function Home() {
   const [exporting, setExporting] = createSignal(false);
   const [fileSize, setFileSize] = createSignal<number | null>(null);
   const [frameRate, setFrameRate] = createSignal(0);
+  const [keyframes, setKeyframes] = createSignal<number[]>([]);
+  const [keyframeSnap, setKeyframeSnap] = createSignal(true);
   const [segments, setSegments] = createSignal<Segment[]>([]);
   const [previewProgress, setPreviewProgress] = createSignal<number | null>(
     null,
@@ -90,11 +93,13 @@ export default function Home() {
       const dur = await getDuration(path);
       const size = await getFileSize(path);
       const fps = await getFrameRate(path);
+      const kf = await getKeyframes(path).catch(() => []);
       setVideoPath(path);
       setDuration(dur);
       setSelectedEnd(dur);
       setFileSize(size);
       setFrameRate(fps);
+      setKeyframes(kf);
       setCurrentTime(0);
     } catch (e) {
       alert(`Could not open video: ${e}`);
@@ -118,6 +123,7 @@ export default function Home() {
     setSelectedEnd(0);
     setFileSize(null);
     setFrameRate(0);
+    setKeyframes([]);
     setSegments([]);
     setPreviewProgress(null);
   };
@@ -347,12 +353,31 @@ export default function Home() {
           "--ff-stack-gap": "var(--ff-space-2)",
         }}
       >
+        <div class="ff-row" style={{ "align-items": "center", gap: "var(--ff-space-2)" }}>
+          <label class="ff-toggle">
+            <input
+              type="checkbox"
+              checked={keyframeSnap()}
+              onChange={(e) => setKeyframeSnap(e.currentTarget.checked)}
+              disabled={!videoPath() || exporting() || keyframes().length === 0}
+            />
+            <span class="ff-toggle__track" />
+            <span>Snap to keyframes</span>
+          </label>
+          {keyframes().length === 0 && videoPath() && (
+            <span class="ff-text--tertiary" style={{ "font-size": "11px" }}>
+              no keyframe data for this file
+            </span>
+          )}
+        </div>
         <Timeline
           duration={duration()}
           start={selectedStart()}
           end={selectedEnd()}
           currentTime={currentTime()}
           frameRate={frameRate()}
+          keyframes={keyframes()}
+          snapToKeyframes={keyframeSnap()}
           segments={segments()}
           onChange={(start, end) => {
             setSelectedStart(start);

@@ -11,6 +11,7 @@ use tauri_plugin_shell::ShellExt;
 struct ServerPort(u16);
 struct PreviewCache(Mutex<std::collections::HashMap<String, String>>);
 struct PreviewProcess(Mutex<Option<(CommandChild, String)>>);
+struct KeyframeCache(Mutex<std::collections::HashMap<String, Vec<f64>>>);
 const NEEDS_REMUX: &[&str] = &["mkv", "avi", "wmv", "flv", "ts", "m2ts", "mts"];
 
 fn needs_remux(path: &str) -> bool {
@@ -319,6 +320,62 @@ async fn get_frame_rate(app: tauri::AppHandle, path: String) -> Result<f64, Stri
 }
 
 #[tauri::command]
+async fn get_keyframes(
+    app: tauri::AppHandle,
+    path: String,
+    cache: State<'_, KeyframeCache>,
+) -> Result<Vec<f64>, String> {
+    if let Some(cached) = {
+        let map = cache.0.lock().map_err(|e| e.to_string())?;
+        map.get(&path).cloned()
+    } {
+        return Ok(cached);
+    }
+
+    let output = app
+        .shell()
+        .sidecar("ffprobe")
+        .map_err(|e| e.to_string())?
+        .args([
+            "-v",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-show_entries",
+            "packet=pts_time,flags",
+            "-of",
+            "csv=p=0",
+            &path,
+        ])
+        .output()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let mut keyframes: Vec<f64> = Vec::new();
+    for line in stdout.lines() {
+        let mut parts = line.splitn(2, ',');
+        let (Some(time), Some(flags)) = (parts.next(), parts.next()) else {
+            continue;
+        };
+        if !flags.contains('K') {
+            continue;
+        }
+        if let Ok(secs) = time.parse::<f64>() {
+            keyframes.push(secs);
+        }
+    }
+    keyframes.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+
+    {
+        let mut map = cache.0.lock().map_err(|e| e.to_string())?;
+        map.insert(path, keyframes.clone());
+    }
+
+    Ok(keyframes)
+}
+
+#[tauri::command]
 async fn cut_video(
     app: tauri::AppHandle,
     input: String,
@@ -420,6 +477,7 @@ pub fn run() {
             handle.manage(ServerPort(port));
             handle.manage(PreviewCache(Mutex::new(std::collections::HashMap::new())));
             handle.manage(PreviewProcess(Mutex::new(None)));
+            handle.manage(KeyframeCache(Mutex::new(std::collections::HashMap::new())));
 
             // Clean up all preview temp files on app close.
             let close_handle = handle.clone();
@@ -462,6 +520,7 @@ pub fn run() {
             get_duration,
             get_file_size,
             get_frame_rate,
+            get_keyframes,
             cut_video,
             cut_video_segments,
             get_video_url,

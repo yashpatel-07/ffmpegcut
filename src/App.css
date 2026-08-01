@@ -433,3 +433,64 @@ video {
 .ff-segment__time {
   color: var(--ff-text-secondary);
 }
+
+.ff-toggle {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--ff-space-2);
+  font-size: var(--ff-text-body);
+  color: var(--ff-text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.ff-toggle input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.ff-toggle__track {
+  position: relative;
+  width: 32px;
+  height: 18px;
+  flex: 0 0 auto;
+  border-radius: var(--ff-radius-pill);
+  background-color: var(--ff-surface-overlay);
+  border: 1px solid var(--ff-border-strong);
+  transition: background-color var(--ff-dur-fast) var(--ff-ease-standard);
+}
+
+.ff-toggle__track::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background-color: var(--ff-text-secondary);
+  transition: transform var(--ff-dur-fast) var(--ff-ease-standard),
+    background-color var(--ff-dur-fast) var(--ff-ease-standard);
+}
+
+.ff-toggle input:checked + .ff-toggle__track {
+  background-color: var(--ff-accent);
+  border-color: var(--ff-accent);
+}
+
+.ff-toggle input:checked + .ff-toggle__track::after {
+  background-color: var(--ff-on-accent);
+  transform: translateX(14px);
+}
+
+.ff-toggle input:focus-visible + .ff-toggle__track {
+  outline: 2px solid var(--ff-accent);
+  outline-offset: 2px;
+}
+
+.ff-toggle:has(input:disabled) {
+  opacity: 0.4;
+  cursor: not-allowed;
+}

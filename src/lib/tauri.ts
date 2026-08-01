@@ -20,6 +20,10 @@ export async function getFrameRate(path: string): Promise<number> {
   return invoke("get_frame_rate", { path });
 }
 
+export async function getKeyframes(path: string): Promise<number[]> {
+  return invoke("get_keyframes", { path });
+}
+
 export async function getVideoUrl(path: string): Promise<string> {
   return invoke("get_video_url", { path });
 }
