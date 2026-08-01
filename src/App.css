@@ -113,8 +113,8 @@ video {
 .app {
   height: 100%;
   padding: var(--ff-space-3);
-  min-width: 800px;
-  min-height: 440px;
+  min-width: 840px;
+  min-height: 560px;
 }
 
 .ff-stack {
@@ -276,6 +276,18 @@ video {
   animation: ff-progress-indeterminate 1.2s var(--ff-ease-standard) infinite;
 }
 
+.ff-status {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0 var(--ff-space-4);
+  color: var(--ff-success);
+  font-size: var(--ff-text-caption);
+}
+
+.ff-status--error {
+  color: var(--ff-danger);
+}
+
 @keyframes ff-progress-indeterminate {
   0% { transform: translateX(-100%); }
   100% { transform: translateX(400%); }
@@ -308,6 +320,16 @@ video {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.ff-preview__overlay {
+  position: absolute;
+  inset: 0;
+  background-color: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: var(--ff-z-raised);
 }
 
 .ff-topbar {
@@ -348,9 +370,9 @@ video {
 
 .ff-timeline {
   position: relative;
-  height: 40px;
+  height: 34px;
   background-color: var(--ff-surface-raised);
-  border-radius: var(--ff-radius-pill);
+  border-radius: var(--ff-radius-md);
   overflow: hidden;
 }
 
@@ -372,7 +394,7 @@ video {
   position: absolute;
   top: 0;
   bottom: 0;
-  width: 12px;
+  width: 6px;
   background-color: var(--ff-range-handle);
   border-radius: var(--ff-radius-md);
   cursor: ew-resize;

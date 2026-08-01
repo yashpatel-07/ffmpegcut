@@ -61,6 +61,11 @@ export default function Home() {
   const [selectedStart, setSelectedStart] = createSignal(0);
   const [selectedEnd, setSelectedEnd] = createSignal(0);
   const [exporting, setExporting] = createSignal(false);
+  const [exportStatus, setExportStatus] = createSignal<{
+    message: string;
+    isError: boolean;
+  } | null>(null);
+  let exportStatusTimer: ReturnType<typeof setTimeout> | undefined;
   const [fileSize, setFileSize] = createSignal<number | null>(null);
   const [frameRate, setFrameRate] = createSignal(0);
   const [keyframes, setKeyframes] = createSignal<number[]>([]);
@@ -69,6 +74,7 @@ export default function Home() {
   const [previewProgress, setPreviewProgress] = createSignal<number | null>(
     null,
   );
+  const [videoLoading, setVideoLoading] = createSignal(false);
 
   // const [videoUrl] = createResource(videoPath, (path) => getVideoUrl(path));
   const [previewPath] = createResource(videoPath, (path) =>
@@ -80,7 +86,10 @@ export default function Home() {
   const unlisten = listen<number>("preview-progress", (event) => {
     setPreviewProgress(event.payload);
   });
-  onCleanup(() => unlisten.then((fn) => fn()));
+  onCleanup(() => {
+    clearTimeout(exportStatusTimer);
+    return unlisten.then((fn) => fn());
+  });
 
   let videoRef: HTMLVideoElement | undefined;
   let idCounter = 0;
@@ -139,14 +148,22 @@ export default function Home() {
     if (!output) return;
 
     setExporting(true);
+    setExportStatus(null);
     try {
       const pairs: [number, number][] = segs.map((s) => [s.start, s.end]);
       await cutVideoSegments(input, output, pairs);
+      showExportStatus("Export complete");
     } catch (e) {
-      alert(`Export failed: ${e}`);
+      showExportStatus(`Export failed: ${e}`, true);
     } finally {
       setExporting(false);
     }
+  };
+
+  const showExportStatus = (message: string, isError = false) => {
+    clearTimeout(exportStatusTimer);
+    setExportStatus({ message, isError });
+    exportStatusTimer = setTimeout(() => setExportStatus(null), 4000);
   };
 
   const canExport = () => segments().length > 0;
@@ -195,9 +212,12 @@ export default function Home() {
           </button>
         </div>
       </div>
-      {exporting() && (
-        <div class="ff-progress ff-progress--indeterminate">
-          <div class="ff-progress__fill" />
+      {exportStatus() && (
+        <div
+          class="ff-status"
+          classList={{ "ff-status--error": exportStatus()!.isError }}
+        >
+          {exportStatus()!.message}
         </div>
       )}
 
@@ -211,50 +231,60 @@ export default function Home() {
       >
         <div style={{ flex: "1 1 auto", "min-width": 0 }}>
           <div class="ff-preview" style={{ position: "relative" }}>
-            {videoPath() ? (
-              previewPath.loading ? (
-                <div class="ff-preview__placeholder">
-                  <span class="ff-text--secondary">
-                    {previewProgress() != null
-                      ? `Preparing preview… ${previewProgress()}%`
-                      : "Preparing preview…"}
-                  </span>
-                </div>
-              ) : previewPath.error ? (
-                <div class="ff-preview__placeholder">
-                  <span class="ff-text--secondary">
-                    Couldn't preview this file: {String(previewPath.error)}
-                  </span>
-                </div>
+            <div style={{ position: "relative" }}>
+              {videoPath() ? (
+                previewPath.loading ? (
+                  <div class="ff-preview__placeholder">
+                    <span class="ff-text--secondary">
+                      {previewProgress() != null
+                        ? `Preparing preview… ${previewProgress()}%`
+                        : "Preparing preview…"}
+                    </span>
+                  </div>
+                ) : previewPath.error ? (
+                  <div class="ff-preview__placeholder">
+                    <span class="ff-text--secondary">
+                      Couldn't preview this file: {String(previewPath.error)}
+                    </span>
+                  </div>
+                ) : (
+                  <video
+                    ref={videoRef!}
+                    class="ff-preview__video"
+                    src={videoUrl()}
+                    controls
+                    onLoadStart={() => setVideoLoading(true)}
+                    onCanPlay={() => setVideoLoading(false)}
+                    onError={() => setVideoLoading(false)}
+                    onLoadedMetadata={() => {
+                      const v = videoRef!;
+                      if (!v) return;
+                      setVideoWidth(v.videoWidth);
+                      setVideoHeight(v.videoHeight);
+                    }}
+                    onTimeUpdate={() => {
+                      const v = videoRef!;
+                      if (!v) return;
+                      setCurrentTime(v.currentTime);
+                    }}
+                  />
+                )
               ) : (
-                <video
-                  ref={videoRef!}
-                  class="ff-preview__video"
-                  src={videoUrl()}
-                  controls
-                  onLoadedMetadata={() => {
-                    const v = videoRef!;
-                    if (!v) return;
-                    setVideoWidth(v.videoWidth);
-                    setVideoHeight(v.videoHeight);
-                  }}
-                  onTimeUpdate={() => {
-                    const v = videoRef!;
-                    if (!v) return;
-                    setCurrentTime(v.currentTime);
-                  }}
-                />
-              )
-            ) : (
-              <div class="ff-preview__placeholder">
-                <button
-                  class="ff-btn ff-btn--primary ff-btn--lg"
-                  onClick={handleOpenVideo}
-                >
-                  Add video
-                </button>
-              </div>
-            )}
+                <div class="ff-preview__placeholder">
+                  <button
+                    class="ff-btn ff-btn--primary ff-btn--lg"
+                    onClick={handleOpenVideo}
+                  >
+                    Add video
+                  </button>
+                </div>
+              )}
+              {videoLoading() && (
+                <div class="ff-preview__overlay">
+                  <span class="ff-text--secondary ff-mono">Loading…</span>
+                </div>
+              )}
+            </div>
             <div class="ff-preview__caption">
               <div
                 class="ff-row"
@@ -349,11 +379,14 @@ export default function Home() {
       <div
         class="ff-stack"
         style={{
-          padding: "var(--ff-space-3) var(--ff-space-4)",
+          padding: "var(--ff-space-4) var(--ff-space-4)",
           "--ff-stack-gap": "var(--ff-space-2)",
         }}
       >
-        <div class="ff-row" style={{ "align-items": "center", gap: "var(--ff-space-2)" }}>
+        <div
+          class="ff-row"
+          style={{ "align-items": "center", gap: "var(--ff-space-2)" }}
+        >
           <label class="ff-toggle">
             <input
               type="checkbox"
@@ -362,7 +395,7 @@ export default function Home() {
               disabled={!videoPath() || exporting() || keyframes().length === 0}
             />
             <span class="ff-toggle__track" />
-            <span>Snap to keyframes</span>
+            <span class="ff-text--secondary ff-mono">Snap to keyframes</span>
           </label>
           {keyframes().length === 0 && videoPath() && (
             <span class="ff-text--tertiary" style={{ "font-size": "11px" }}>
@@ -390,7 +423,7 @@ export default function Home() {
         />
       </div>
       <span class="ff-text--secondary ff-mono">
-        ~Preview files (if any) are automatically deleted when you close the app
+        Some formats are converted for preview; these temporary files are deleted automatically when the app closes
       </span>
     </main>
   );

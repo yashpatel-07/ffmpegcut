@@ -13,10 +13,10 @@
     "windows": [
       {
         "title": "ffmpegcut",
-        "width": 840,
-        "height": 480,
-        "minWidth": 800,
-        "minHeight": 440,
+        "width": 900,
+        "height": 620,
+        "minWidth": 840,
+        "minHeight": 560,
         "resizable": true
       }
     ],

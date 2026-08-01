@@ -10,7 +10,8 @@ A small cross-platform desktop app for cutting video clips fast. Powered by Taur
 
 ## Features
 
-- Two-handle timeline to pick an in / out point, with frame-accurate snapping
+- Two-handle timeline to pick an in / out point, with frame-accurate snapping and an optional snap-to-keyframes toggle
+- Snap to keyframes toggle (on by default): aligns the timeline handles and playhead to the file's keyframes, falling back to frame snapping when a file has no keyframe data
 - Multiple cuts in one pass — add as many segments as you want, export once
 - Native open and save dialogs
 - Stream-copy output (no quality loss, very fast)
