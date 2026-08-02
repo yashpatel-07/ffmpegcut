@@ -1,4 +1,4 @@
-import { createSignal, createResource, For, onCleanup } from "solid-js";
+import { createSignal, createResource, createMemo, For, onCleanup } from "solid-js";
 import { listen } from "@tauri-apps/api/event";
 import {
   pickVideo,
@@ -10,6 +10,7 @@ import {
   getVideoUrl,
   generatePreview,
   cancelPreview,
+  cancelExport,
   cutVideoSegments,
 } from "../lib/tauri";
 import Timeline, { type Segment } from "../components/Timeline";
@@ -52,6 +53,13 @@ function formatFileSize(bytes: number): string {
   return `${(mb / 1024).toFixed(1)} GB`;
 }
 
+function formatClock(sec: number): string {
+  const s = Math.max(0, Math.round(sec));
+  const m = Math.floor(s / 60);
+  const rem = s % 60;
+  return `${m}:${rem.toString().padStart(2, "0")}`;
+}
+
 export default function Home() {
   const [videoPath, setVideoPath] = createSignal<string | null>(null);
   const [duration, setDuration] = createSignal(0);
@@ -66,15 +74,34 @@ export default function Home() {
     isError: boolean;
   } | null>(null);
   let exportStatusTimer: ReturnType<typeof setTimeout> | undefined;
+  const [showExportOptions, setShowExportOptions] = createSignal(false);
+  const DEFAULT_EXPORT_OPTIONS = {
+    mode: "copy" as "copy" | "encode",
+    codec: "h264" as "h264" | "h265",
+    bitrate: "auto",
+    crf: 18,
+    frameRate: null as number | null,
+    resolution: "original",
+  };
+  const [exportOptions, setExportOptions] = createSignal({
+    ...DEFAULT_EXPORT_OPTIONS,
+  });
   const [fileSize, setFileSize] = createSignal<number | null>(null);
   const [frameRate, setFrameRate] = createSignal(0);
   const [keyframes, setKeyframes] = createSignal<number[]>([]);
   const [keyframeSnap, setKeyframeSnap] = createSignal(true);
+  const [showKeyframeTip, setShowKeyframeTip] = createSignal(true);
   const [segments, setSegments] = createSignal<Segment[]>([]);
   const [previewProgress, setPreviewProgress] = createSignal<number | null>(
     null,
   );
   const [videoLoading, setVideoLoading] = createSignal(false);
+  const [exportProgress, setExportProgress] = createSignal<number | null>(null);
+  const [exportRemaining, setExportRemaining] = createSignal<number | null>(
+    null,
+  );
+  let exportStart = 0;
+  let cancelRequested = false;
 
   // const [videoUrl] = createResource(videoPath, (path) => getVideoUrl(path));
   const [previewPath] = createResource(videoPath, (path) =>
@@ -86,9 +113,21 @@ export default function Home() {
   const unlisten = listen<number>("preview-progress", (event) => {
     setPreviewProgress(event.payload);
   });
+  const unlistenExport = listen<number>("export-progress", (event) => {
+    const pct = event.payload;
+    setExportProgress(pct);
+    const elapsed = (Date.now() - exportStart) / 1000;
+    if (pct > 0) {
+      setExportRemaining((elapsed * (100 - pct)) / pct);
+    }
+  });
   onCleanup(() => {
     clearTimeout(exportStatusTimer);
-    return unlisten.then((fn) => fn());
+    const fns = Promise.all([unlisten, unlistenExport]);
+    return fns.then(([fn1, fn2]) => {
+      fn1();
+      fn2();
+    });
   });
 
   let videoRef: HTMLVideoElement | undefined;
@@ -149,14 +188,20 @@ export default function Home() {
 
     setExporting(true);
     setExportStatus(null);
+    setExportProgress(null);
+    setExportRemaining(null);
+    cancelRequested = false;
+    exportStart = Date.now();
     try {
       const pairs: [number, number][] = segs.map((s) => [s.start, s.end]);
-      await cutVideoSegments(input, output, pairs);
-      showExportStatus("Export complete");
+      await cutVideoSegments(input, output, pairs, exportOptions());
+      if (!cancelRequested) showExportStatus("Export complete");
     } catch (e) {
-      showExportStatus(`Export failed: ${e}`, true);
+      if (!cancelRequested) showExportStatus(`Export failed: ${e}`, true);
     } finally {
       setExporting(false);
+      setExportProgress(null);
+      setExportRemaining(null);
     }
   };
 
@@ -183,6 +228,53 @@ export default function Home() {
     setSegments((prev) => prev.filter((s) => s.id !== id));
   };
 
+  const estimateBytes = (start: number, end: number): number | null => {
+    const fs = fileSize();
+    const dur = duration();
+    if (fs == null || dur <= 0) return null;
+    const totalDur = Math.max(0, end - start);
+    if (totalDur <= 0) return 0;
+
+    const opts = exportOptions();
+    if (opts.mode === "copy") {
+      return (fs / dur) * totalDur;
+    }
+
+    if (opts.bitrate !== "auto") {
+      const vbps = (parseInt(opts.bitrate) || 0) * 1000;
+      const abps = 192000;
+      return Math.round(((vbps + abps) / 8) * totalDur * 1.03);
+    }
+
+    let scaleFactor = 1;
+    if (opts.resolution !== "original") {
+      const srcH = videoHeight();
+      const targetH = parseInt(opts.resolution) || srcH;
+      if (srcH > 0) {
+        const eff = Math.min(targetH, srcH);
+        scaleFactor = (eff * eff) / (srcH * srcH);
+      }
+    }
+    let fpsFactor = 1;
+    const srcFps = frameRate();
+    if (opts.frameRate && opts.frameRate > 0 && srcFps > 0) {
+      fpsFactor = opts.frameRate / srcFps;
+    }
+    return Math.round((fs / dur) * totalDur * scaleFactor * fpsFactor);
+  };
+
+  const totalEstimate = createMemo(() => {
+    const segs = segments();
+    if (segs.length === 0) return null;
+    let total = 0;
+    for (const seg of segs) {
+      const e = estimateBytes(seg.start, seg.end);
+      if (e == null) return null;
+      total += e;
+    }
+    return total;
+  });
+
   return (
     <main class="app ff-stack" style={{ "--ff-stack-gap": "0" }}>
       <div class="ff-topbar">
@@ -194,15 +286,23 @@ export default function Home() {
           >
             Cancel
           </button>
-          <button
-            class="ff-btn ff-btn--secondary"
-            onClick={handleReset}
-            disabled={!videoPath() || exporting()}
-          >
-            Reset
-          </button>
         </div>
         <div class="ff-topbar__end">
+          <button
+            class="ff-btn ff-btn--secondary"
+            onClick={() =>
+              setShowExportOptions((v) => {
+                const next = !v;
+                if (!next) setExportOptions({ ...DEFAULT_EXPORT_OPTIONS });
+                return next;
+              })
+            }
+            disabled={exporting()}
+            title="Export options"
+            style={{ "font-size": "18px" }}
+          >
+            ⚙
+          </button>
           <button
             class="ff-btn ff-btn--primary"
             onClick={handleExport}
@@ -212,12 +312,133 @@ export default function Home() {
           </button>
         </div>
       </div>
+      {showExportOptions() && (
+        <div class="ff-export-options">
+          <label class="ff-export-options__field">
+            <span class="ff-text--tertiary ff-mono">Mode</span>
+            <select
+              class="ff-select"
+              value={exportOptions().mode}
+              onChange={(e) =>
+                setExportOptions((o) => ({
+                  ...o,
+                  mode: e.currentTarget.value as "copy" | "encode",
+                }))
+              }
+            >
+              <option value="copy">Stream copy (lossless)</option>
+              <option value="encode">Re-encode</option>
+            </select>
+          </label>
+          {exportOptions().mode === "encode" && (
+            <>
+              <label class="ff-export-options__field">
+                <span class="ff-text--tertiary ff-mono">Codec</span>
+                <select
+                  class="ff-select"
+                  value={exportOptions().codec}
+                  onChange={(e) =>
+                    setExportOptions((o) => ({
+                      ...o,
+                      codec: e.currentTarget.value as "h264" | "h265",
+                    }))
+                  }
+                >
+                  <option value="h264">H.264</option>
+                  <option value="h265">H.265</option>
+                </select>
+              </label>
+              <label class="ff-export-options__field">
+                <span class="ff-text--tertiary ff-mono">Bitrate</span>
+                <select
+                  class="ff-select"
+                  value={exportOptions().bitrate}
+                  onChange={(e) =>
+                    setExportOptions((o) => ({
+                      ...o,
+                      bitrate: e.currentTarget.value,
+                    }))
+                  }
+                >
+                  <option value="auto">Auto (CRF)</option>
+                  <option value="4000k">4 Mbps</option>
+                  <option value="8000k">8 Mbps</option>
+                  <option value="16000k">16 Mbps</option>
+                </select>
+              </label>
+              <label class="ff-export-options__field">
+                <span class="ff-text--tertiary ff-mono">Frame rate</span>
+                <select
+                  class="ff-select"
+                  value={exportOptions().frameRate ?? "source"}
+                  onChange={(e) =>
+                    setExportOptions((o) => ({
+                      ...o,
+                      frameRate:
+                        e.currentTarget.value === "source"
+                          ? null
+                          : Number(e.currentTarget.value),
+                    }))
+                  }
+                >
+                  <option value="source">Source</option>
+                  <option value="24">24 fps</option>
+                  <option value="30">30 fps</option>
+                  <option value="60">60 fps</option>
+                </select>
+              </label>
+              <label class="ff-export-options__field">
+                <span class="ff-text--tertiary ff-mono">Resolution</span>
+                <select
+                  class="ff-select"
+                  value={exportOptions().resolution}
+                  onChange={(e) =>
+                    setExportOptions((o) => ({
+                      ...o,
+                      resolution: e.currentTarget.value,
+                    }))
+                  }
+                >
+                  <option value="original">Original</option>
+                  <option value="2160p">2160p</option>
+                  <option value="1440p">1440p</option>
+                  <option value="1080p">1080p</option>
+                  <option value="720p">720p</option>
+                  <option value="480p">480p</option>
+                </select>
+              </label>
+            </>
+          )}
+        </div>
+      )}
       {exportStatus() && (
         <div
           class="ff-status"
           classList={{ "ff-status--error": exportStatus()!.isError }}
         >
           {exportStatus()!.message}
+        </div>
+      )}
+      {exporting() && (
+        <div class="ff-export-progress">
+          <span>
+            {exportProgress() != null
+              ? exportRemaining() != null
+                ? `Exporting… ${exportProgress()}% · ~${formatClock(exportRemaining()!)} left`
+                : `Exporting… ${exportProgress()}%`
+              : "Exporting…"}
+          </span>
+          <button
+            class="ff-btn ff-btn--secondary ff-btn--sm ff-btn--icon"
+            onClick={() => {
+              cancelRequested = true;
+              cancelExport().catch(() => {});
+              showExportStatus("Export cancelled");
+            }}
+            title="Cancel export"
+          >
+            ✕
+          </button>
         </div>
       )}
 
@@ -339,38 +560,41 @@ export default function Home() {
         >
           <div class="ff-segment-container">
             <For each={segments()}>
-              {(seg) => (
-                <div class="ff-segment">
-                  <span class="ff-segment__time ff-mono">
-                    {formatDuration(seg.start, frameRate())} —{" "}
-                    {formatDuration(seg.end, frameRate())}
-                  </span>
-                  <button
-                    class="ff-btn ff-btn--tertiary ff-btn--sm ff-btn--icon"
-                    onClick={() => removeSegment(seg.id)}
-                    disabled={exporting()}
-                  >
-                    ✕
-                  </button>
-                </div>
-              )}
+              {(seg) => {
+                const est = estimateBytes(seg.start, seg.end);
+                return (
+                  <div class="ff-segment">
+                    <span class="ff-segment__time ff-mono">
+                      {formatDuration(seg.start, frameRate())} —{" "}
+                      {formatDuration(seg.end, frameRate())}
+                    </span>
+                    {est != null && (
+                      <span class="ff-segment__size ff-mono">
+                        ~{formatFileSize(est)}
+                      </span>
+                    )}
+                    <button
+                      class="ff-btn ff-btn--tertiary ff-btn--sm ff-btn--icon"
+                      onClick={() => removeSegment(seg.id)}
+                      disabled={exporting()}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                );
+              }}
             </For>
           </div>
-          <div class="ff-segment">
-            <button
-              class="ff-btn ff-btn--tertiary ff-btn--sm"
-              onClick={addSegment}
-              disabled={!canAddSegment() || exporting()}
-            >
-              + Add segment
-            </button>
-          </div>
           {segments().length > 0 ? (
-            ""
+            <span class="ff-text--secondary ff-mono">
+              {totalEstimate() != null
+                ? `Total: ~${formatFileSize(totalEstimate()!)}`
+                : "Total: —"}
+            </span>
           ) : (
             <span class="ff-text--secondary ff-mono">
-              Use sliders on left and right to highlight the segment and then
-              click "+ Add segment"
+              Drag the timeline handles to set a range, then click "+ Add
+              segment" below the timeline
             </span>
           )}
         </div>
@@ -385,7 +609,11 @@ export default function Home() {
       >
         <div
           class="ff-row"
-          style={{ "align-items": "center", gap: "var(--ff-space-2)" }}
+          style={{
+            "align-items": "center",
+            "justify-content": "space-between",
+            gap: "var(--ff-space-2)",
+          }}
         >
           <label class="ff-toggle">
             <input
@@ -402,7 +630,31 @@ export default function Home() {
               no keyframe data for this file
             </span>
           )}
+          <div class="ff-segment" style={{ margin: 0 }}>
+            <button
+              class="ff-btn ff-btn--tertiary ff-btn--sm"
+              onClick={handleReset}
+              disabled={!videoPath() || exporting()}
+            >
+              Reset
+            </button>
+          </div>
         </div>
+        {videoPath() && showKeyframeTip() && (
+          <div class="ff-keyframe-tip">
+            <span class="ff-text--tertiary ff-mono">
+              Keyframes can be several seconds apart on some videos, so snapping
+              only allows cuts at those points — turn it off for finer control.
+            </span>
+            <button
+              class="ff-btn ff-btn--tertiary ff-btn--sm ff-btn--icon"
+              onClick={() => setShowKeyframeTip(false)}
+              title="Dismiss"
+            >
+              ✕
+            </button>
+          </div>
+        )}
         <Timeline
           duration={duration()}
           start={selectedStart()}
@@ -421,6 +673,17 @@ export default function Home() {
           }}
           disabled={!videoPath() || duration() === 0}
         />
+        <div class="ff-row" style={{ "justify-content": "center" }}>
+          <div class="ff-segment" style={{ margin: 0 }}>
+            <button
+              class="ff-btn ff-btn--tertiary ff-btn--sm"
+              onClick={addSegment}
+              disabled={!canAddSegment() || exporting()}
+            >
+              + Add segment
+            </button>
+          </div>
+        </div>
       </div>
       <span class="ff-text--secondary ff-mono">
         Some formats are converted for preview; these temporary files are deleted automatically when the app closes

@@ -114,7 +114,7 @@ video {
   height: 100%;
   padding: var(--ff-space-3);
   min-width: 840px;
-  min-height: 560px;
+  min-height: 620px;
 }
 
 .ff-stack {
@@ -167,7 +167,7 @@ video {
   border-radius: var(--ff-radius-md);
   background-color: var(--ff-surface-raised);
   color: var(--ff-text);
-  font-family: inherit;
+  font-family: var(--ff-font-mono);
   font-size: var(--ff-text-body);
   font-weight: var(--ff-weight-medium);
   line-height: 1;
@@ -288,6 +288,44 @@ video {
   color: var(--ff-danger);
 }
 
+.ff-export-progress {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--ff-space-2);
+  padding: 0 var(--ff-space-4);
+  color: var(--ff-text-secondary);
+  font-family: var(--ff-font-mono);
+  font-size: var(--ff-text-caption);
+}
+
+.ff-export-options {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--ff-space-3);
+  padding: var(--ff-space-2) var(--ff-space-4);
+}
+
+.ff-export-options__field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ff-space-1);
+}
+
+.ff-select {
+  height: var(--ff-control-md);
+  padding: 0 var(--ff-space-2);
+  border: 1px solid var(--ff-border);
+  border-radius: var(--ff-radius-md);
+  background-color: var(--ff-surface-raised);
+  color: var(--ff-text);
+  font-family: inherit;
+  font-size: var(--ff-text-caption);
+  cursor: pointer;
+}
+
 @keyframes ff-progress-indeterminate {
   0% { transform: translateX(-100%); }
   100% { transform: translateX(400%); }
@@ -368,6 +406,12 @@ video {
   gap: var(--ff-space-2);
 }
 
+.ff-keyframe-tip {
+  display: flex;
+  align-items: center;
+  gap: var(--ff-space-2);
+}
+
 .ff-timeline {
   position: relative;
   height: 34px;
@@ -437,6 +481,10 @@ video {
   flex-direction: row;
   align-items: start;
   flex-wrap: wrap;
+  border: 1px solid var(--ff-border);
+  border-radius: var(--ff-radius-lg);
+  padding: var(--ff-space-2);
+  min-height: 72px;
 }
 
 .ff-segment {
@@ -444,6 +492,7 @@ video {
   flex-direction: row;
   align-items: center;
   justify-content: space-between;
+  gap: var(--ff-space-2);
   height: 28px;
   width: fit-content;
   margin: 0 0 6px 6px;
@@ -454,6 +503,10 @@ video {
 
 .ff-segment__time {
   color: var(--ff-text-secondary);
+}
+
+.ff-segment__size {
+  color: var(--ff-text-tertiary);
 }
 
 .ff-toggle {

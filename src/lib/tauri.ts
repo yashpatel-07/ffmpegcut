@@ -36,10 +36,24 @@ export async function cancelPreview(): Promise<void> {
   return invoke("cancel_preview");
 }
 
+export async function cancelExport(): Promise<void> {
+  return invoke("cancel_export");
+}
+
+export interface ExportOptions {
+  mode: "copy" | "encode";
+  codec: "h264" | "h265";
+  bitrate: string;
+  crf: number;
+  frameRate: number | null;
+  resolution: string;
+}
+
 export async function cutVideoSegments(
   input: string,
   output: string,
   segments: [number, number][],
+  options: ExportOptions,
 ): Promise<void> {
-  return invoke("cut_video_segments", { input, output, segments });
+  return invoke("cut_video_segments", { input, output, segments, options });
 }

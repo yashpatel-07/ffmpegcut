@@ -11,6 +11,7 @@ use tauri_plugin_shell::ShellExt;
 struct ServerPort(u16);
 struct PreviewCache(Mutex<std::collections::HashMap<String, String>>);
 struct PreviewProcess(Mutex<Option<(CommandChild, String)>>);
+struct ExportProcess(Mutex<Option<(CommandChild, String, String)>>);
 struct KeyframeCache(Mutex<std::collections::HashMap<String, Vec<f64>>>);
 const NEEDS_REMUX: &[&str] = &["mkv", "avi", "wmv", "flv", "ts", "m2ts", "mts"];
 
@@ -48,6 +49,20 @@ async fn cancel_preview(proc: State<'_, PreviewProcess>) -> Result<(), String> {
     if let Some((child, out_path)) = entry {
         // Ignore errors from killing an already-exited process.
         let _ = child.kill();
+        let _ = tokio::fs::remove_file(&out_path).await;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn cancel_export(proc: State<'_, ExportProcess>) -> Result<(), String> {
+    let entry = {
+        let mut guard = proc.0.lock().map_err(|e| e.to_string())?;
+        guard.take()
+    };
+    if let Some((child, concat_path, out_path)) = entry {
+        let _ = child.kill();
+        let _ = tokio::fs::remove_file(&concat_path).await;
         let _ = tokio::fs::remove_file(&out_path).await;
     }
     Ok(())
@@ -413,12 +428,24 @@ async fn cut_video(
     Ok(())
 }
 
+#[derive(serde::Deserialize, Default)]
+#[serde(default)]
+struct ExportOptions {
+    mode: String,
+    codec: String,
+    bitrate: String,
+    crf: u8,
+    frame_rate: Option<f64>,
+    resolution: String,
+}
+
 #[tauri::command]
 async fn cut_video_segments(
     app: tauri::AppHandle,
     input: String,
     output: String,
     segments: Vec<(f64, f64)>,
+    options: ExportOptions,
 ) -> Result<(), String> {
     if segments.is_empty() {
         return Err("No segments to cut".to_string());
@@ -437,28 +464,139 @@ async fn cut_video_segments(
     std::fs::write(&concat_path, &content).map_err(|e| e.to_string())?;
 
     let concat_str = concat_path.to_string_lossy().to_string();
-    let result = app
+
+    let mut args: Vec<String> = vec![
+        "-f".into(),
+        "concat".into(),
+        "-safe".into(),
+        "0".into(),
+        "-i".into(),
+        concat_str.clone(),
+    ];
+
+    if options.mode == "encode" {
+        let video_codec = match options.codec.as_str() {
+            "h265" => "libx265",
+            _ => "libx264",
+        };
+        args.push("-c:v".into());
+        args.push(video_codec.into());
+        args.push("-preset".into());
+        args.push("medium".into());
+
+        if options.bitrate != "auto" && !options.bitrate.is_empty() {
+            args.push("-b:v".into());
+            args.push(options.bitrate.clone());
+        } else {
+            let mut crf = options.crf;
+            if video_codec == "libx265" {
+                crf = crf.saturating_add(6);
+            }
+            args.push("-crf".into());
+            args.push(format!("{}", crf));
+        }
+
+        if let Some(fps) = options.frame_rate {
+            if fps > 0.0 {
+                args.push("-r".into());
+                args.push(format!("{:.3}", fps));
+            }
+        }
+
+        if options.resolution != "original" && !options.resolution.is_empty() {
+            let height: u32 = options
+                .resolution
+                .trim_end_matches('p')
+                .parse()
+                .map_err(|_| "Invalid resolution".to_string())?;
+            args.push("-vf".into());
+            args.push(format!("scale=-2:min({}\\,ih)", height));
+        }
+
+        args.push("-c:a".into());
+        args.push("aac".into());
+        args.push("-b:a".into());
+        args.push("192k".into());
+        args.push("-ac".into());
+        args.push("2".into());
+        args.push("-movflags".into());
+        args.push("+faststart".into());
+    } else {
+        args.push("-c".into());
+        args.push("copy".into());
+    }
+
+    args.push("-f".into());
+    args.push("mp4".into());
+    args.push("-progress".into());
+    args.push("pipe:1".into());
+    args.push("-y".into());
+    args.push(output.clone());
+
+    let total_duration: f64 = segments.iter().map(|(start, end)| (end - start).max(0.0)).sum();
+
+    let (mut rx, child) = app
         .shell()
         .sidecar("ffmpeg")
         .map_err(|e| e.to_string())?
-        .args([
-            "-f", "concat",
-            "-safe", "0",
-            "-i", &concat_str,
-            "-c", "copy",
-            "-f", "mp4",
-            "-y",
-            &output,
-        ])
-        .output()
-        .await
+        .args(&args)
+        .spawn()
         .map_err(|e| e.to_string())?;
+
+    {
+        let export_proc = app.state::<ExportProcess>();
+        let mut guard = export_proc.0.lock().map_err(|e| e.to_string())?;
+        *guard = Some((child, concat_str.clone(), output.clone()));
+    }
+
+    let mut stdout_buf = String::new();
+    let mut stderr_buf = String::new();
+    let mut exited_with: Option<TerminatedPayload> = None;
+
+    while let Some(event) = rx.recv().await {
+        match event {
+            CommandEvent::Stdout(bytes) => {
+                stdout_buf.push_str(&String::from_utf8_lossy(&bytes));
+                while let Some(nl) = stdout_buf.find('\n') {
+                    let line = stdout_buf[..nl].trim().to_string();
+                    stdout_buf.drain(..=nl);
+                    if let Some(time_str) = line.strip_prefix("out_time=") {
+                        if total_duration > 0.0 {
+                            if let Some(secs) = parse_ffmpeg_time(time_str) {
+                                let pct = (((secs / total_duration) * 100.0)
+                                    .clamp(0.0, 100.0)) as u8;
+                                let _ = app.emit("export-progress", pct);
+                            }
+                        }
+                    }
+                }
+            }
+            CommandEvent::Stderr(bytes) => {
+                stderr_buf.push_str(&String::from_utf8_lossy(&bytes));
+            }
+            CommandEvent::Terminated(payload) => {
+                exited_with = Some(payload);
+            }
+            _ => {}
+        }
+    }
 
     let _ = std::fs::remove_file(&concat_path);
 
-    if !result.status.success() {
-        let stderr = String::from_utf8_lossy(&result.stderr);
-        return Err(format!("ffmpeg failed: {}", stderr));
+    {
+        let export_proc = app.state::<ExportProcess>();
+        let mut guard = export_proc.0.lock().map_err(|e| e.to_string())?;
+        *guard = None;
+    }
+
+    let success = exited_with
+        .as_ref()
+        .and_then(|p| p.code)
+        .map(|c| c == 0)
+        .unwrap_or(false);
+
+    if !success {
+        return Err(format!("ffmpeg failed: {}", stderr_buf));
     }
     Ok(())
 }
@@ -477,6 +615,7 @@ pub fn run() {
             handle.manage(ServerPort(port));
             handle.manage(PreviewCache(Mutex::new(std::collections::HashMap::new())));
             handle.manage(PreviewProcess(Mutex::new(None)));
+            handle.manage(ExportProcess(Mutex::new(None)));
             handle.manage(KeyframeCache(Mutex::new(std::collections::HashMap::new())));
 
             // Clean up all preview temp files on app close.
@@ -486,6 +625,20 @@ pub fn run() {
                 if let tauri::WindowEvent::CloseRequested { .. } = event {
                     let cache = close_handle.state::<PreviewCache>();
                     let proc = close_handle.state::<PreviewProcess>();
+                    let export_proc = close_handle.state::<ExportProcess>();
+
+                    let export_entry = {
+                        let mut guard = match export_proc.0.lock() {
+                            Ok(g) => g,
+                            Err(_) => return,
+                        };
+                        guard.take()
+                    };
+                    if let Some((child, concat_path, out_path)) = export_entry {
+                        let _ = child.kill();
+                        let _ = std::fs::remove_file(&concat_path);
+                        let _ = std::fs::remove_file(&out_path);
+                    }
 
                     let in_flight = {
                         let mut guard = match proc.0.lock() {
@@ -526,6 +679,7 @@ pub fn run() {
             get_video_url,
             generate_preview,
             cancel_preview,
+            cancel_export,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

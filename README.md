@@ -1,12 +1,10 @@
 # ffmpegcut
 
-A small cross-platform desktop app for cutting video clips fast. Powered by Tauri, Solid, and a bundled `ffmpeg` doing stream-copy cuts — no re-encoding.
+A small cross-platform desktop app for cutting video clips fast. Powered by Tauri, Solid, and a bundled `ffmpeg` doing stream-copy cuts by default, with an optional re-encode export.
 
 ## Preview
 
-<img src="preview/ffmpegcut_prev2.png" alt="preview_img">
-
-<img src="preview/ffmpegcut_prev1.png" alt="preview_img">
+<img src="preview/preview_n.png" alt="preview_img">
 
 ## Features
 
@@ -15,6 +13,10 @@ A small cross-platform desktop app for cutting video clips fast. Powered by Taur
 - Multiple cuts in one pass — add as many segments as you want, export once
 - Native open and save dialogs
 - Stream-copy output (no quality loss, very fast)
+- Optional re-encode export with codec (H.264/H.265), bitrate, frame rate, and resolution controls
+- Export settings panel (gear button): codec, bitrate, fps, and resolution, resetting to lossless defaults when closed
+- Export progress line during any export (%, ~time left on re-encode; stream copy flashes a brief "Exporting…"), with a ✕ to cancel and clean up temp files
+- Estimated output size shown per segment and as a total, updating live with export settings
 - Single binary app on macOS and Windows
 
 ## Platform support
@@ -84,8 +86,8 @@ Note: the app is unsigned. Windows SmartScreen will warn on first launch.
 ## How it works
 
 1. Pick a video with the native file dialog.
-2. Drag the two timeline handles (full-width below the preview) to set a range. Add it as a segment in the panel next to the preview; repeat for as many cuts as you want.
-3. Click **Export** in the topbar, choose where to save, and `ffmpegcut` runs `ffmpeg` once with the `concat` demuxer — every segment is stitched in a single stream-copy pass.
+2. Drag the two timeline handles (full-width below the preview) to set a range. Click **+ Add segment** below the timeline to add it; repeat for as many cuts as you want.
+3. Click **Export** in the topbar, choose where to save, and `ffmpegcut` runs `ffmpeg` once with the `concat` demuxer — every segment is stitched in a single stream-copy pass. Use the gear button next to Export to opt into re-encoding with codec, bitrate, frame rate, and resolution settings; re-encoding shows a progress line (`Exporting… % · ~time left`) with a ✕ cancel button.
 4. Use **Reset** or **Cancel** in the topbar to clear the selection or unload the video.
 
 ## Tech stack
@@ -102,7 +104,7 @@ Note: the app is unsigned. Windows SmartScreen will warn on first launch.
 - [Solid 1.9](https://www.solidjs.com/) + TypeScript — reactive UI
 - [Vite 6](https://vitejs.dev/) — dev server / bundler
 - [bun](https://bun.sh/) — package manager
-- [ffmpeg](https://ffmpeg.org/) / [ffprobe](https://ffmpeg.org/ffprobe.html) — bundled, used in stream-copy mode
+- [ffmpeg](https://ffmpeg.org/) / [ffprobe](https://ffmpeg.org/ffprobe.html) — bundled, used in stream-copy and re-encode modes
 
 ## License
 
